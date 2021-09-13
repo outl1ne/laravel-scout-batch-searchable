@@ -2,8 +2,12 @@
 
 namespace OptimistDigital\ScoutBatchSearchable;
 
+use Illuminate\Console\Scheduling\Schedule;
+
 class ServiceProvider extends \Illuminate\Support\ServiceProvider
 {
+    public static $batchSearchableModels = [];
+
     /**
      * Register any application services.
      *
@@ -21,5 +25,16 @@ class ServiceProvider extends \Illuminate\Support\ServiceProvider
      */
     public function boot()
     {
+        if ($this->app->runningInConsole()) {
+            $this->app->booted(function () {
+                /** @var Schedule */
+                $schedule = $this->app->make(Schedule::class);
+                $schedule->call(function () {
+                    foreach (static::$batchSearchableModels as $batchClass) {
+                        (new $batchClass)->checkBatchingStatusAndDispatchIfNecessary();
+                    }
+                })->description('Scout Batch Searchable')->everyMinute();
+            });
+        }
     }
 }

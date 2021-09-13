@@ -4,13 +4,36 @@ namespace OptimistDigital\ScoutBatchSearchable;
 
 use Illuminate\Support\Str;
 use Laravel\Scout\Searchable;
-use Illuminate\Support\Cache;
+use Illuminate\Support\Collection as BaseCollection;
+use Illuminate\Support\Facades\Cache;
 
 trait BatchSearchable
 {
     use Searchable {
         queueMakeSearchable as public parentQueueMakeSearchable;
         queueRemoveFromSearch as public parentQueueRemoveFromSearch;
+    }
+
+    public static $batchModels = [];
+
+    /**
+     * Register the searchable macros.
+     *
+     * @return void
+     */
+    public function registerSearchableMacros()
+    {
+        ServiceProvider::$batchSearchableModels[] = static::class;
+
+        $self = $this;
+
+        BaseCollection::macro('searchable', function () use ($self) {
+            $self->queueMakeSearchable($this);
+        });
+
+        BaseCollection::macro('unsearchable', function () use ($self) {
+            $self->queueRemoveFromSearch($this);
+        });
     }
 
     /**
@@ -28,11 +51,6 @@ trait BatchSearchable
         $this->addToBatchingQueue($models, true);
     }
 
-    public function originalQueueMakeSearchable($models)
-    {
-        return $this->parentQueueMakeSearchable($models);
-    }
-
     /**
      * Dispatch the job to make the given models unsearchable.
      *
@@ -48,18 +66,13 @@ trait BatchSearchable
         $this->addToBatchingQueue($models, false);
     }
 
-    public function originalQueueRemoveFromSearch($models)
-    {
-        return $this->parentQueueRemoveFromSearch($models);
-    }
-
     private function addToBatchingQueue($models, $makeSearchable = true)
     {
         if ($models->isEmpty()) return;
 
         $cacheKey = $makeSearchable ? $this->getMakeSearchableCacheKey() : $this->getRemoveFromSearchCacheKey();
         $existingCacheValue = Cache::get($cacheKey) ?? ['updated_at' => now(), 'models' => []];
-        $modelIds = $models->pluck($models->first()->getKeyName());
+        $modelIds = $models->pluck($models->first()->getKeyName())->toArray();
         $newModelIds = array_unique(array_merge($existingCacheValue['models'], $modelIds));
         $newCacheValue = ['updated_at' => now(), 'models' => $newModelIds];
         Cache::put($cacheKey, $newCacheValue);
@@ -78,13 +91,19 @@ trait BatchSearchable
         $cacheKey = $makeSearchable ? $this->getMakeSearchableCacheKey() : $this->getRemoveFromSearchCacheKey();
         $cachedValue = Cache::get($cacheKey) ?? ['updated_at' => now(), 'models' => []];
 
-        $batchSize = config('scout.batch_searchable_min_batch_size');
-        ray(['batchSize' => $batchSize, 'cacheKey' => $cacheKey, 'value' => $cachedValue]);
-        if (sizeof($cachedValue['models']) > $batchSize) {
-            $models = static::findMany($cachedValue['models']);
+        $maxBatchSize = config('scout.batch_searchable_max_batch_size', 250);
+        $maxBatchSizeExceeded = sizeof($cachedValue['models']) >= $maxBatchSize;
+
+        $maxTimeInMin = config('batch_searchable_debounce_time_in_min', 1);
+        $maxTimePassed = now()->diffInMinutes($cachedValue['updated_at']) >= $maxTimeInMin;
+
+        if ($maxBatchSizeExceeded || $maxTimePassed) {
+            ray(['action' => 'Dispatching.', 'maxBatchSizeExceeded' => $maxBatchSizeExceeded, 'maxTimePassed' => $maxTimePassed]);
+            Cache::forget($cacheKey);
+            $models = (new static)->newQueryWithoutScopes()->findMany($cachedValue['models']);
             return $makeSearchable
-                ? $this->originalQueueMakeSearchable($models)
-                : $this->originalQueueRemoveFromSearch($mdoels);
+                ? $this->parentQueueMakeSearchable($models)
+                : $this->parentQueueRemoveFromSearch($models);
         }
     }
 
@@ -101,7 +120,7 @@ trait BatchSearchable
     private function getGenericCacheKey($suffix)
     {
         $cacheKey = config('scout.batch_searchable_cache_key', 'SCOUT_BATCH_SEARCHABLE_QUEUE');
-        $className = Str::snake(static::class);
+        $className = Str::upper(Str::snake(Str::replace('\\', '', static::class)));
         return "{$cacheKey}_{$className}_{$suffix}";
     }
 }
