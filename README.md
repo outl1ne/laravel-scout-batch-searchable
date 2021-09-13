@@ -7,8 +7,7 @@ This [Laravel](https://laravel.com) package allows for batching of Scout updates
 
 ## Requirements
 
-- Laravel 7+
-- Laravel Scout
+- Laravel Scout 9+
 - Scheduler/cron
 
 ## Features
@@ -19,8 +18,20 @@ This [Laravel](https://laravel.com) package allows for batching of Scout updates
 
 Install the package in a Laravel Nova project via Composer and run migrations:
 
-```
+```bash
 composer require optimistdigital/laravel-scout-batch-searchable
+```
+
+## Usage
+
+Where you previously used the Searchable trait, just use BatchSearchable instead:
+
+```php
+use OptimistDigital\ScoutBatchSearchable\BatchSearchable;
+
+class SomeModel extends Model {
+    use BatchSearchable;
+}
 ```
 
 ## Credits
