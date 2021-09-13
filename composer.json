@@ -1,0 +1,33 @@
+{
+  "name": "optimistdigital/laravel-scout-batch-searchable",
+  "description": "This Laravel package adds a BatchSearchable trait to allow batching Scout updates.",
+  "keywords": [
+    "laravel",
+    "scout",
+    "batch",
+    "optimistdigital"
+  ],
+  "license": "MIT",
+  "require": {
+    "php": ">=7.2.0",
+    "99designs/phumbor": "^1.2",
+    "laravel/framework": "^6.0 || ^7.0"
+  },
+  "autoload": {
+    "psr-4": {
+      "OptimistDigital\\ScoutBatchSearchable\\": "src/"
+    }
+  },
+  "extra": {
+    "laravel": {
+      "providers": [
+        "OptimistDigital\\ScoutBatchSearchable\\ServiceProvider"
+      ]
+    }
+  },
+  "config": {
+    "sort-packages": true
+  },
+  "minimum-stability": "dev",
+  "prefer-stable": true
+}
