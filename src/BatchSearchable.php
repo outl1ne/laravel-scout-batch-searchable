@@ -23,6 +23,9 @@ trait BatchSearchable
      */
     public function registerSearchableMacros()
     {
+        // Let ServiceProvider know which models use the BatchSearchable trait
+        // so the scheduled command knows which models to check for syncing via
+        // the debounce timer
         ServiceProvider::$batchSearchableModels[] = static::class;
 
         $self = $this;
@@ -48,6 +51,7 @@ trait BatchSearchable
             return;
         }
 
+        // Save the model ID's to cache
         $this->addToBatchingQueue($models, true);
     }
 
@@ -63,6 +67,7 @@ trait BatchSearchable
             return;
         }
 
+        // Save the model ID's to cache
         $this->addToBatchingQueue($models, false);
     }
 
@@ -71,11 +76,13 @@ trait BatchSearchable
         if ($models->isEmpty()) return;
         $className = get_class($models->first());
 
-        $cacheKey = $makeSearchable ? $this->getMakeSearchableCacheKey($className) : $this->getRemoveFromSearchCacheKey($className);
+        $cacheKey = $this->getCacheKey($className, $makeSearchable);
         $existingCacheValue = Cache::get($cacheKey) ?? ['updated_at' => now(), 'models' => []];
+
         $modelIds = $models->pluck($models->first()->getKeyName())->toArray();
         $newModelIds = array_unique(array_merge($existingCacheValue['models'], $modelIds));
         $newCacheValue = ['updated_at' => now(), 'models' => $newModelIds];
+
         Cache::put($cacheKey, $newCacheValue);
 
         $this->checkBatchingStatusAndDispatchIfNecessaryFor($className, $makeSearchable);
@@ -89,7 +96,7 @@ trait BatchSearchable
 
     private function checkBatchingStatusAndDispatchIfNecessaryFor($className, $makeSearchable = true)
     {
-        $cacheKey = $makeSearchable ? $this->getMakeSearchableCacheKey($className) : $this->getRemoveFromSearchCacheKey($className);
+        $cacheKey = $this->getCacheKey($className, $makeSearchable);
         $cachedValue = Cache::get($cacheKey) ?? ['updated_at' => now(), 'models' => []];
 
         $maxBatchSize = config('scout.batch_searchable_max_batch_size', 250);
@@ -104,30 +111,17 @@ trait BatchSearchable
                 ? $className::withTrashed()->findMany($cachedValue['models'])
                 : $className::findMany($cachedValue['models']);
 
-            // ray([
-            //     'action' => 'Dispatching.',
-            //     'class' => $className,
-            //     'cacheKey' => $cacheKey,
-            //     'maxBatchSizeExceeded' => $maxBatchSizeExceeded,
-            //     'maxTimePassed' => $maxTimePassed,
-            //     'models' => $models,
-            //     'modelIds' => $cachedValue['models'],
-            // ]);
-
             return $makeSearchable
                 ? $this->parentQueueMakeSearchable($models)
                 : $this->parentQueueRemoveFromSearch($models);
         }
     }
 
-    private function getMakeSearchableCacheKey($className)
+    private function getCacheKey($className, $makeSearchable)
     {
-        return $this->getGenericCacheKey($className, 'MAKE_SEARCHABLE');
-    }
-
-    private function getRemoveFromSearchCacheKey($className)
-    {
-        return $this->getGenericCacheKey($className, 'REMOVE_FROM_SEARCH');
+        return $makeSearchable
+            ? $this->getGenericCacheKey($className, 'MAKE_SEARCHABLE')
+            : $this->getGenericCacheKey($className, 'REMOVE_FROM_SEARCH');
     }
 
     private function getGenericCacheKey($className, $suffix)
