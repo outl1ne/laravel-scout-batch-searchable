@@ -69,26 +69,27 @@ trait BatchSearchable
     private function addToBatchingQueue($models, $makeSearchable = true)
     {
         if ($models->isEmpty()) return;
+        $className = get_class($models->first());
 
-        $cacheKey = $makeSearchable ? $this->getMakeSearchableCacheKey() : $this->getRemoveFromSearchCacheKey();
+        $cacheKey = $makeSearchable ? $this->getMakeSearchableCacheKey($className) : $this->getRemoveFromSearchCacheKey($className);
         $existingCacheValue = Cache::get($cacheKey) ?? ['updated_at' => now(), 'models' => []];
         $modelIds = $models->pluck($models->first()->getKeyName())->toArray();
         $newModelIds = array_unique(array_merge($existingCacheValue['models'], $modelIds));
         $newCacheValue = ['updated_at' => now(), 'models' => $newModelIds];
         Cache::put($cacheKey, $newCacheValue);
 
-        $this->checkBatchingStatusAndDispatchIfNecessaryFor($makeSearchable);
+        $this->checkBatchingStatusAndDispatchIfNecessaryFor($className, $makeSearchable);
     }
 
-    public function checkBatchingStatusAndDispatchIfNecessary()
+    public function checkBatchingStatusAndDispatchIfNecessary($className)
     {
-        $this->checkBatchingStatusAndDispatchIfNecessaryFor(true);
-        $this->checkBatchingStatusAndDispatchIfNecessaryFor(false);
+        $this->checkBatchingStatusAndDispatchIfNecessaryFor($className, true);
+        $this->checkBatchingStatusAndDispatchIfNecessaryFor($className, false);
     }
 
-    private function checkBatchingStatusAndDispatchIfNecessaryFor($makeSearchable = true)
+    private function checkBatchingStatusAndDispatchIfNecessaryFor($className, $makeSearchable = true)
     {
-        $cacheKey = $makeSearchable ? $this->getMakeSearchableCacheKey() : $this->getRemoveFromSearchCacheKey();
+        $cacheKey = $makeSearchable ? $this->getMakeSearchableCacheKey($className) : $this->getRemoveFromSearchCacheKey($className);
         $cachedValue = Cache::get($cacheKey) ?? ['updated_at' => now(), 'models' => []];
 
         $maxBatchSize = config('scout.batch_searchable_max_batch_size', 250);
@@ -98,29 +99,41 @@ trait BatchSearchable
         $maxTimePassed = now()->diffInMinutes($cachedValue['updated_at']) >= $maxTimeInMin;
 
         if ($maxBatchSizeExceeded || $maxTimePassed) {
-            ray(['action' => 'Dispatching.', 'maxBatchSizeExceeded' => $maxBatchSizeExceeded, 'maxTimePassed' => $maxTimePassed]);
             Cache::forget($cacheKey);
-            $models = (new static)->newQueryWithoutScopes()->findMany($cachedValue['models']);
+            $models = method_exists($this, 'trashed')
+                ? $className::withTrashed()->findMany($cachedValue['models'])
+                : $className::findMany($cachedValue['models']);
+
+            // ray([
+            //     'action' => 'Dispatching.',
+            //     'class' => $className,
+            //     'cacheKey' => $cacheKey,
+            //     'maxBatchSizeExceeded' => $maxBatchSizeExceeded,
+            //     'maxTimePassed' => $maxTimePassed,
+            //     'models' => $models,
+            //     'modelIds' => $cachedValue['models'],
+            // ]);
+
             return $makeSearchable
                 ? $this->parentQueueMakeSearchable($models)
                 : $this->parentQueueRemoveFromSearch($models);
         }
     }
 
-    private function getMakeSearchableCacheKey()
+    private function getMakeSearchableCacheKey($className)
     {
-        return $this->getGenericCacheKey('MAKE_SEARCHABLE');
+        return $this->getGenericCacheKey($className, 'MAKE_SEARCHABLE');
     }
 
-    private function getRemoveFromSearchCacheKey()
+    private function getRemoveFromSearchCacheKey($className)
     {
-        return $this->getGenericCacheKey('REMOVE_FROM_SEARCH');
+        return $this->getGenericCacheKey($className, 'REMOVE_FROM_SEARCH');
     }
 
-    private function getGenericCacheKey($suffix)
+    private function getGenericCacheKey($className, $suffix)
     {
         $cacheKey = config('scout.batch_searchable_cache_key', 'SCOUT_BATCH_SEARCHABLE_QUEUE');
-        $className = Str::upper(Str::snake(Str::replace('\\', '', static::class)));
+        $className = Str::upper(Str::snake(Str::replace('\\', '', $className)));
         return "{$cacheKey}_{$className}_{$suffix}";
     }
 }

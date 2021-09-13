@@ -31,7 +31,7 @@ class ServiceProvider extends \Illuminate\Support\ServiceProvider
                 $schedule = $this->app->make(Schedule::class);
                 $schedule->call(function () {
                     foreach (static::$batchSearchableModels as $batchClass) {
-                        (new $batchClass)->checkBatchingStatusAndDispatchIfNecessary();
+                        (new $batchClass)->checkBatchingStatusAndDispatchIfNecessary($batchClass);
                     }
                 })->description('Scout Batch Searchable')->everyMinute();
             });
