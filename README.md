@@ -8,11 +8,7 @@ This [Laravel](https://laravel.com) package allows for batching of Scout updates
 ## Requirements
 
 - Laravel Scout 9+
-- Scheduler/cron
-
-## Features
-
-- Batches Laravel Scout updates
+- Scheduler with cron
 
 ## Description
 
@@ -30,7 +26,7 @@ or
 
 The IDs of models that require updating are stored in the default cache layer using the `Cache` helper.
 
-The debounce check uses Laravel's Scheduler to schedule a job that checks through all the pending update queues and sees if the required time has passed. This requires that the system has a working CRON setup that calls `schedule:run` every minute.
+The debounce check uses Laravel's Scheduler to schedule a job that checks through all the pending update queues and sees if the required time has passed. This requires that the system has a working cron setup that calls `schedule:run` every minute.
 
 ## Installation
 
