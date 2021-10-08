@@ -75,15 +75,37 @@ trait BatchSearchable
     {
         if ($models->isEmpty()) return;
         $className = get_class($models->first());
+        $modelIds = $models->pluck($models->first()->getKeyName())->toArray();
 
+        // Add IDs to the requested queue
         $cacheKey = $this->getCacheKey($className, $makeSearchable);
         $existingCacheValue = Cache::get($cacheKey) ?? ['updated_at' => now(), 'models' => []];
 
-        $modelIds = $models->pluck($models->first()->getKeyName())->toArray();
         $newModelIds = array_unique(array_merge($existingCacheValue['models'], $modelIds));
         $newCacheValue = ['updated_at' => now(), 'models' => $newModelIds];
 
-        Cache::put($cacheKey, $newCacheValue);
+        // Remove IDs from the opposite queue
+        $opCacheKey = $this->getCacheKey($className, !$makeSearchable);
+        $opExistingCacheValue = Cache::get($opCacheKey) ?? ['updated_at' => now(), 'models' => []];
+
+        $newOpModelIds = array_filter($opExistingCacheValue['models'], function ($id) use ($modelIds) {
+            return !in_array($id, $modelIds);
+        });
+        $newOpCacheValue = ['updated_at' => now(), 'models' => array_values($newOpModelIds)];
+
+        // Store
+        if (empty($newCacheValue['models'])) {
+            Cache::forget($cacheKey);
+        } else {
+            Cache::put($cacheKey, $newCacheValue);
+        }
+
+        if (empty($newOpCacheValue['models'])) {
+            Cache::forget($opCacheKey);
+        } else {
+            Cache::put($opCacheKey, $newOpCacheValue);
+        }
+
 
         $this->checkBatchingStatusAndDispatchIfNecessaryFor($className, $makeSearchable);
     }
