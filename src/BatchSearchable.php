@@ -2,10 +2,12 @@
 
 namespace OptimistDigital\ScoutBatchSearchable;
 
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Str;
 use Laravel\Scout\Searchable;
 use Illuminate\Support\Collection as BaseCollection;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Config;
 
 trait BatchSearchable
 {
@@ -34,8 +36,16 @@ trait BatchSearchable
             $self->queueMakeSearchable($this);
         });
 
+        BaseCollection::macro('searchableImmediately', function () use ($self) {
+            $self->parentQueueMakeSearchable($this);
+        });
+
         BaseCollection::macro('unsearchable', function () use ($self) {
             $self->queueRemoveFromSearch($this);
+        });
+
+        BaseCollection::macro('unsearchableImmediately', function () use ($self) {
+            $self->parentQueueRemoveFromSearch($this);
         });
     }
 
@@ -79,19 +89,19 @@ trait BatchSearchable
 
         // Add IDs to the requested queue
         $cacheKey = $this->getCacheKey($className, $makeSearchable);
-        $existingCacheValue = Cache::get($cacheKey) ?? ['updated_at' => now(), 'models' => []];
+        $existingCacheValue = Cache::get($cacheKey) ?? ['updated_at' => Carbon::now(), 'models' => []];
 
         $newModelIds = array_unique(array_merge($existingCacheValue['models'], $modelIds));
-        $newCacheValue = ['updated_at' => now(), 'models' => $newModelIds];
+        $newCacheValue = ['updated_at' => Carbon::now(), 'models' => $newModelIds];
 
         // Remove IDs from the opposite queue
         $opCacheKey = $this->getCacheKey($className, !$makeSearchable);
-        $opExistingCacheValue = Cache::get($opCacheKey) ?? ['updated_at' => now(), 'models' => []];
+        $opExistingCacheValue = Cache::get($opCacheKey) ?? ['updated_at' => Carbon::now(), 'models' => []];
 
         $newOpModelIds = array_filter($opExistingCacheValue['models'], function ($id) use ($modelIds) {
             return !in_array($id, $modelIds);
         });
-        $newOpCacheValue = ['updated_at' => now(), 'models' => array_values($newOpModelIds)];
+        $newOpCacheValue = ['updated_at' => Carbon::now(), 'models' => array_values($newOpModelIds)];
 
         // Store
         if (empty($newCacheValue['models'])) {
@@ -119,13 +129,13 @@ trait BatchSearchable
     private function checkBatchingStatusAndDispatchIfNecessaryFor($className, $makeSearchable = true)
     {
         $cacheKey = $this->getCacheKey($className, $makeSearchable);
-        $cachedValue = Cache::get($cacheKey) ?? ['updated_at' => now(), 'models' => []];
+        $cachedValue = Cache::get($cacheKey) ?? ['updated_at' => Carbon::now(), 'models' => []];
 
-        $maxBatchSize = config('scout.batch_searchable_max_batch_size', 250);
+        $maxBatchSize = Config::get('scout.batch_searchable_max_batch_size', 250);
         $maxBatchSizeExceeded = sizeof($cachedValue['models']) >= $maxBatchSize;
 
-        $maxTimeInMin = config('batch_searchable_debounce_time_in_min', 1);
-        $maxTimePassed = now()->diffInMinutes($cachedValue['updated_at']) >= $maxTimeInMin;
+        $maxTimeInMin = Config::get('batch_searchable_debounce_time_in_min', 1);
+        $maxTimePassed = Carbon::now()->diffInMinutes($cachedValue['updated_at']) >= $maxTimeInMin;
 
         if ($maxBatchSizeExceeded || $maxTimePassed) {
             Cache::forget($cacheKey);
@@ -148,7 +158,7 @@ trait BatchSearchable
 
     private function getGenericCacheKey($className, $suffix)
     {
-        $cacheKey = config('scout.batch_searchable_cache_key', 'SCOUT_BATCH_SEARCHABLE_QUEUE');
+        $cacheKey = Config::get('scout.batch_searchable_cache_key', 'SCOUT_BATCH_SEARCHABLE_QUEUE');
         $className = Str::upper(Str::snake(Str::replace('\\', '', $className)));
         return "{$cacheKey}_{$className}_{$suffix}";
     }
