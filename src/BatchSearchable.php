@@ -2,12 +2,12 @@
 
 namespace OptimistDigital\ScoutBatchSearchable;
 
-use Illuminate\Support\Carbon;
 use Illuminate\Support\Str;
 use Laravel\Scout\Searchable;
-use Illuminate\Support\Collection as BaseCollection;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Config;
+use Illuminate\Support\Collection as BaseCollection;
 
 trait BatchSearchable
 {
@@ -16,8 +16,6 @@ trait BatchSearchable
         queueRemoveFromSearch as public parentQueueRemoveFromSearch;
     }
 
-    public static $batchModels = [];
-
     /**
      * Register the searchable macros.
      *
@@ -25,11 +23,6 @@ trait BatchSearchable
      */
     public function registerSearchableMacros()
     {
-        // Let ServiceProvider know which models use the BatchSearchable trait
-        // so the scheduled command knows which models to check for syncing via
-        // the debounce timer
-        ServiceProvider::$batchSearchableModels[] = static::class;
-
         $self = $this;
 
         BaseCollection::macro('searchable', function () use ($self) {
@@ -86,6 +79,7 @@ trait BatchSearchable
         if ($models->isEmpty()) return;
         $className = get_class($models->first());
         $modelIds = $models->pluck($models->first()->getKeyName())->toArray();
+        ServiceProvider::addBatchedModelClass($className);
 
         // Add IDs to the requested queue
         $cacheKey = $this->getCacheKey($className, $makeSearchable);
@@ -130,6 +124,7 @@ trait BatchSearchable
     {
         $cacheKey = $this->getCacheKey($className, $makeSearchable);
         $cachedValue = Cache::get($cacheKey) ?? ['updated_at' => Carbon::now(), 'models' => []];
+        if (empty($cachedValue['models'])) return;
 
         $maxBatchSize = Config::get('scout.batch_searchable_max_batch_size', 250);
         $maxBatchSizeExceeded = sizeof($cachedValue['models']) >= $maxBatchSize;
@@ -138,6 +133,7 @@ trait BatchSearchable
         $maxTimePassed = Carbon::now()->diffInMinutes($cachedValue['updated_at']) >= $maxTimeInMin;
 
         if ($maxBatchSizeExceeded || $maxTimePassed) {
+            ServiceProvider::removeBatchedModelClass($className);
             Cache::forget($cacheKey);
             $models = method_exists($this, 'trashed')
                 ? $className::withTrashed()->findMany($cachedValue['models'])

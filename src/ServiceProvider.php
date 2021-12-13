@@ -2,12 +2,11 @@
 
 namespace OptimistDigital\ScoutBatchSearchable;
 
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Console\Scheduling\Schedule;
 
 class ServiceProvider extends \Illuminate\Support\ServiceProvider
 {
-    public static $batchSearchableModels = [];
-
     /**
      * Register any application services.
      *
@@ -30,11 +29,36 @@ class ServiceProvider extends \Illuminate\Support\ServiceProvider
                 /** @var Schedule */
                 $schedule = $this->app->make(Schedule::class);
                 $schedule->call(function () {
-                    foreach (static::$batchSearchableModels as $batchClass) {
+                    $batchedModelsClasses = static::getBatchedModelsClasses();
+                    foreach ($batchedModelsClasses as $batchClass) {
                         (new $batchClass)->checkBatchingStatusAndDispatchIfNecessary($batchClass);
                     }
                 })->description('Scout Batch Searchable')->everyMinute();
             });
         }
+    }
+
+    public static function getBatchedModelsClasses()
+    {
+        return Cache::get('BATCH_SEARCHABLE_QUEUED_MODELS') ?? [];
+    }
+
+    public static function addBatchedModelClass($className)
+    {
+        $queuedModels = static::getBatchedModelsClasses();
+        $queuedModels[] = $className;
+        $queuedModels = array_unique($queuedModels);
+        Cache::put('BATCH_SEARCHABLE_QUEUED_MODELS', $queuedModels);
+        return $queuedModels;
+    }
+
+    public static function removeBatchedModelClass($className)
+    {
+        $queuedModels = static::getBatchedModelsClasses();
+        $queuedModels = array_filter($queuedModels, function ($cls) use ($className) {
+            return $cls !== $className;
+        });
+        Cache::put('BATCH_SEARCHABLE_QUEUED_MODELS', $queuedModels);
+        return $queuedModels;
     }
 }
