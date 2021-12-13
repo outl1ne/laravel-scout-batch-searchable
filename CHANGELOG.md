@@ -7,10 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [1.1.0] - 2021-12-13
 
+### Added
+
+- Added `searchableImmediately` and `unsearchableImmediately` methods (thanks to [@keithbrink](https://github.com/keithbrink))
+
 ### Changed
 
 - Improved how batched models are registered for the debounce job
-- Added `searchableImmediately` and `unsearchableImmediately` methods (thanks to [@keithbrink](https://github.com/keithbrink))
 
 ## [1.0.1] - 2021-10-08
 
