@@ -34,6 +34,9 @@ class ServiceProvider extends \Illuminate\Support\ServiceProvider
                         $instantiatedBatchObject = new $batchClass;
                         if (method_exists($instantiatedBatchObject, 'checkBatchingStatusAndDispatchIfNecessary')) {
                             $instantiatedBatchObject->checkBatchingStatusAndDispatchIfNecessary($batchClass);
+                        } else {
+                            // Seems like the stored model has lost its BatchSearchable trait
+                            static::removeBatchedModelClass($batchClass);
                         }
                     }
                 })->description('Scout Batch Searchable')->everyMinute();
