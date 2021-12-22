@@ -32,7 +32,7 @@ class ServiceProvider extends \Illuminate\Support\ServiceProvider
                     $batchedModelsClasses = static::getBatchedModelsClasses();
                     foreach ($batchedModelsClasses as $batchClass) {
                         $instantiatedBatchObject = new $batchClass;
-                        if(method_exists($instantiatedBatchObject, 'checkBatchingStatusAndDispatchIfNecessary')) {
+                        if (method_exists($instantiatedBatchObject, 'checkBatchingStatusAndDispatchIfNecessary')) {
                             $instantiatedBatchObject->checkBatchingStatusAndDispatchIfNecessary($batchClass);
                         }
                     }
