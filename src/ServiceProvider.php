@@ -31,7 +31,10 @@ class ServiceProvider extends \Illuminate\Support\ServiceProvider
                 $schedule->call(function () {
                     $batchedModelsClasses = static::getBatchedModelsClasses();
                     foreach ($batchedModelsClasses as $batchClass) {
-                        (new $batchClass)->checkBatchingStatusAndDispatchIfNecessary($batchClass);
+                        $instantiatedBatchObject = new $batchClass;
+                        if(method_exists($instantiatedBatchObject, 'checkBatchingStatusAndDispatchIfNecessary')) {
+                            $instantiatedBatchObject->checkBatchingStatusAndDispatchIfNecessary($batchClass);
+                        }
                     }
                 })->description('Scout Batch Searchable')->everyMinute();
             });
