@@ -1,5 +1,5 @@
 {
-  "name": "optimistdigital/laravel-scout-batch-searchable",
+  "name": "owenconti/laravel-scout-batch-searchable",
   "description": "This Laravel package adds a BatchSearchable trait to allow batching Scout updates.",
   "keywords": [
     "laravel",
