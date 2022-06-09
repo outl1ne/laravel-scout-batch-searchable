@@ -1,6 +1,6 @@
 <?php
 
-namespace OptimistDigital\ScoutBatchSearchable;
+namespace Outl1ne\ScoutBatchSearchable;
 
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Console\Scheduling\Schedule;

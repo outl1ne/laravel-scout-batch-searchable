@@ -1,6 +1,6 @@
 <?php
 
-namespace OptimistDigital\ScoutBatchSearchable;
+namespace Outl1ne\ScoutBatchSearchable;
 
 use Illuminate\Support\Str;
 use Laravel\Scout\Searchable;
