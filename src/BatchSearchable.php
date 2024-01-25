@@ -78,24 +78,44 @@ trait BatchSearchable
     {
         if ($models->isEmpty()) return;
         $className = get_class($models->first());
-        $modelIds = $models->pluck($models->first()->getKeyName())->toArray();
         ServiceProvider::addBatchedModelClass($className);
 
         // Add IDs to the requested queue
         $cacheKey = $this->getCacheKey($className, $makeSearchable);
         $existingCacheValue = Cache::get($cacheKey) ?? ['updated_at' => Carbon::now(), 'models' => []];
 
-        $newModelIds = array_unique(array_merge($existingCacheValue['models'], $modelIds));
-        $newCacheValue = ['updated_at' => Carbon::now(), 'models' => $newModelIds];
+        // Upgrade backwards compatibility - the existing cache IDs might still be primary keys not whole models
+        $existingCacheValue['models'] = collect($existingCacheValue['models'])->map(function ($keyOrModel) use ($className) {
+            if (is_object($keyOrModel)) return $keyOrModel;
+
+            return method_exists($className, 'trashed')
+                ? $className::withTrashed()->with([])->find($keyOrModel)
+                : $className::with([])->find($keyOrModel);
+        });
+
+        $newModels = $models
+            ->map(fn ($model) => $model->unsetRelations()->setAppends([])) // Unset relations to reduce the size of the cache
+            ->merge($existingCacheValue['models'] ?? [])
+            ->reverse() // Reverse before ->unique() to keep the latest version
+            ->unique($models->first()->getKeyName())
+            ->values(); // Fix keys and keep the whole thing as a sequential array;
+
+        $newCacheValue = ['updated_at' => Carbon::now(), 'models' => $newModels];
 
         // Remove IDs from the opposite queue
         $opCacheKey = $this->getCacheKey($className, !$makeSearchable);
         $opExistingCacheValue = Cache::get($opCacheKey) ?? ['updated_at' => Carbon::now(), 'models' => []];
 
-        $newOpModelIds = array_filter($opExistingCacheValue['models'], function ($id) use ($modelIds) {
-            return !in_array($id, $modelIds);
-        });
-        $newOpCacheValue = ['updated_at' => Carbon::now(), 'models' => array_values($newOpModelIds)];
+        $newOppositeModels = collect($opExistingCacheValue['models'])
+            ->filter(function ($keyOrModel) use ($newModels) {
+                // Upgrade backwards compatibility, model can either be a primary key or an actual model
+                $key = is_object($keyOrModel) ? $keyOrModel->getKey() : $keyOrModel;
+
+                return $newModels->where($newModels->first()->getKeyName(), $key)->isEmpty();
+            })
+            ->values();
+
+        $newOpCacheValue = ['updated_at' => Carbon::now(), 'models' => $newOppositeModels];
 
         // Store
         if (empty($newCacheValue['models'])) {
@@ -135,9 +155,7 @@ trait BatchSearchable
         if ($maxBatchSizeExceeded || $maxTimePassed) {
             ServiceProvider::removeBatchedModelClass($className);
             Cache::forget($cacheKey);
-            $models = method_exists($this, 'trashed')
-                ? $className::withTrashed()->findMany($cachedValue['models'])
-                : $className::findMany($cachedValue['models']);
+            $models = collect($cachedValue['models'])->filter(fn ($model) => is_object($model))->values();
 
             return $makeSearchable
                 ? $this->parentQueueMakeSearchable($models)
