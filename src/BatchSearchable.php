@@ -118,13 +118,13 @@ trait BatchSearchable
         $newOpCacheValue = ['updated_at' => Carbon::now(), 'models' => $newOppositeModels];
 
         // Store
-        if (empty($newCacheValue['models'])) {
+        if ($newCacheValue['models']->isEmpty()) {
             Cache::forget($cacheKey);
         } else {
             Cache::put($cacheKey, $newCacheValue);
         }
 
-        if (empty($newOpCacheValue['models'])) {
+        if ($newOpCacheValue['models']->isEmpty()) {
             Cache::forget($opCacheKey);
         } else {
             Cache::put($opCacheKey, $newOpCacheValue);
@@ -143,11 +143,15 @@ trait BatchSearchable
     private function checkBatchingStatusAndDispatchIfNecessaryFor($className, $makeSearchable = true)
     {
         $cacheKey = $this->getCacheKey($className, $makeSearchable);
-        $cachedValue = Cache::get($cacheKey) ?? ['updated_at' => Carbon::now(), 'models' => []];
-        if (empty($cachedValue['models'])) return;
+        $cachedValue = Cache::get($cacheKey) ?? ['updated_at' => Carbon::now(), 'models' => collect()];
+
+        // Wrap in collect() for backwards compatibility
+        $cachedValue['models'] = collect($cachedValue['models']);
+
+        if ($cachedValue['models']->isEmpty()) return;
 
         $maxBatchSize = Config::get('scout.batch_searchable_max_batch_size', 250);
-        $maxBatchSizeExceeded = sizeof($cachedValue['models']) >= $maxBatchSize;
+        $maxBatchSizeExceeded = $cachedValue['models']->count() >= $maxBatchSize;
 
         $maxTimeInMin = Config::get('scout.batch_searchable_debounce_time_in_min', 1);
         $maxTimePassed = Carbon::now()->diffInMinutes($cachedValue['updated_at']) >= $maxTimeInMin;
@@ -155,7 +159,7 @@ trait BatchSearchable
         if ($maxBatchSizeExceeded || $maxTimePassed) {
             ServiceProvider::removeBatchedModelClass($className);
             Cache::forget($cacheKey);
-            $models = collect($cachedValue['models'])->filter(fn ($model) => is_object($model))->values();
+            $models = $cachedValue['models']->filter(fn ($model) => is_object($model))->values();
 
             return $makeSearchable
                 ? $this->parentQueueMakeSearchable($models)
