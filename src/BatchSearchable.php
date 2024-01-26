@@ -85,6 +85,7 @@ trait BatchSearchable
         $cacheKey = $this->getCacheKey($className, $makeSearchable);
         $existingCacheValue = Cache::get($cacheKey) ?? ['updated_at' => Carbon::now(), 'models' => []];
 
+        $existingCacheValue['models'] = is_array($existingCacheValue['models']) ? $existingCacheValue['models'] : [];
         $newModelIds = array_unique(array_merge($existingCacheValue['models'], $modelIds));
         $newCacheValue = ['updated_at' => Carbon::now(), 'models' => $newModelIds];
 
@@ -92,6 +93,7 @@ trait BatchSearchable
         $opCacheKey = $this->getCacheKey($className, !$makeSearchable);
         $opExistingCacheValue = Cache::get($opCacheKey) ?? ['updated_at' => Carbon::now(), 'models' => []];
 
+        $opExistingCacheValue['models'] = is_array($opExistingCacheValue['models']) ? $opExistingCacheValue['models'] : [];
         $newOpModelIds = array_filter($opExistingCacheValue['models'], function ($id) use ($modelIds) {
             return !in_array($id, $modelIds);
         });
