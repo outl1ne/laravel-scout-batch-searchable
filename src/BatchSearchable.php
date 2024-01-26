@@ -136,12 +136,15 @@ trait BatchSearchable
             ServiceProvider::removeBatchedModelClass($className);
             Cache::forget($cacheKey);
 
+            $fakeModel = new $className;
+            $keyName = $fakeModel->getScoutKeyName();
+
             $models = collect();
 
             if ($makeSearchable) {
                 $models = method_exists($this, 'trashed')
-                    ? $className::withTrashed()->findMany($cachedValue['models'])
-                    : $className::findMany($cachedValue['models']);
+                    ? $className::withTrashed()->whereIn($keyName, $cachedValue['models'])->get()
+                    : $className::whereIn($keyName, $cachedValue['models'])->get();
             } else {
                 $models = collect($cachedValue['models'])->map(function ($id) use ($className) {
                     $model = new $className;
