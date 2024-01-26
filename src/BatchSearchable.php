@@ -78,7 +78,7 @@ trait BatchSearchable
     {
         if ($models->isEmpty()) return;
         $className = get_class($models->first());
-        $modelIds = $models->pluck($models->first()->getKeyName())->toArray();
+        $modelIds = $models->pluck($models->first()->getScoutKeyName())->toArray();
         ServiceProvider::addBatchedModelClass($className);
 
         // Add IDs to the requested queue
@@ -135,9 +135,20 @@ trait BatchSearchable
         if ($maxBatchSizeExceeded || $maxTimePassed) {
             ServiceProvider::removeBatchedModelClass($className);
             Cache::forget($cacheKey);
-            $models = method_exists($this, 'trashed')
-                ? $className::withTrashed()->findMany($cachedValue['models'])
-                : $className::findMany($cachedValue['models']);
+
+            $models = collect();
+
+            if ($makeSearchable) {
+                $models = method_exists($this, 'trashed')
+                    ? $className::withTrashed()->findMany($cachedValue['models'])
+                    : $className::findMany($cachedValue['models']);
+            } else {
+                $models = collect($cachedValue['models'])->map(function ($id) use ($className) {
+                    $model = new $className;
+                    $model->{$model->getScoutKeyName()} = $id;
+                    return $model;
+                });
+            }
 
             return $makeSearchable
                 ? $this->parentQueueMakeSearchable($models)
