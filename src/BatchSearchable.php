@@ -78,7 +78,7 @@ trait BatchSearchable
     {
         if ($models->isEmpty()) return;
         $className = get_class($models->first());
-        $modelIds = $models->pluck($models->first()->getScoutKeyName())->toArray();
+        $modelIds = $models->pluck($models->first()->getKeyName())->toArray();
         ServiceProvider::addBatchedModelClass($className);
 
         // Add IDs to the requested queue
@@ -87,7 +87,7 @@ trait BatchSearchable
 
         $existingCacheValue['models'] = is_array($existingCacheValue['models']) ? $existingCacheValue['models'] : [];
         $newModelIds = array_unique(array_merge($existingCacheValue['models'], $modelIds));
-        $newCacheValue = ['updated_at' => Carbon::now(), 'models' => $newModelIds];
+        $newCacheValue = ['updated_at' => Carbon::now(), 'models' => array_values($newModelIds)];
 
         // Remove IDs from the opposite queue
         $opCacheKey = $this->getCacheKey($className, !$makeSearchable);
@@ -139,7 +139,7 @@ trait BatchSearchable
             Cache::forget($cacheKey);
 
             $fakeModel = new $className;
-            $keyName = $fakeModel->getScoutKeyName();
+            $keyName = $fakeModel->getKeyName();
 
             $models = collect();
 
@@ -150,7 +150,7 @@ trait BatchSearchable
             } else {
                 $models = collect($cachedValue['models'])->map(function ($id) use ($className) {
                     $model = new $className;
-                    $model->{$model->getScoutKeyName()} = $id;
+                    $model->{$model->getKeyName()} = $id;
                     return $model;
                 });
             }
