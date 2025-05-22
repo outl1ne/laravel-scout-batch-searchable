@@ -132,7 +132,7 @@ trait BatchSearchable
         $maxBatchSizeExceeded = sizeof($cachedValue['models']) >= $maxBatchSize;
 
         $maxTimeInMin = Config::get('scout.batch_searchable_debounce_time_in_min', 1);
-        $maxTimePassed = Carbon::now()->diffInMinutes($cachedValue['updated_at']) >= $maxTimeInMin;
+        $maxTimePassed = Carbon::now()->diffInMinutes($cachedValue['updated_at'], $absolute = true) >= $maxTimeInMin;
 
         if ($maxBatchSizeExceeded || $maxTimePassed) {
             ServiceProvider::removeBatchedModelClass($className);
